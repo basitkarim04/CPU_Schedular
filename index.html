@@ -6,7 +6,9 @@
     <title>CPU Process Scheduler</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
 </head>
+
 <body>
     <header>
         <nav class="navbar">
@@ -26,9 +28,8 @@
           </div>
         </nav>
       </header>
-<br><br><br>
       <main>    
-    <div class="container">
+  <div class="container">
         <h1>CPU Process Scheduler</h1>
         <form id="processForm">
             <label for="numProcesses">Number of Processes:</label>
@@ -50,9 +51,10 @@
 
         <div id="inputs"></div>
         <button id="calculate" style="display:none;">Calculate</button>
-
-        <div id="ganttChart"></div>
-        <table id="metricsTable" style="display:none;">
+        <div id="ganttChartContainer" style="display:none;">
+          <div id="ganttChart"></div>
+        </div>
+                <table id="metricsTable" style="display:none;">
             <thead>
                 <tr>
                     <th>Process</th>
@@ -67,6 +69,15 @@
             <tbody></tbody>
         </table>
         <div id="averages" style="display:none;"></div>
+
+        <div id="quantumModal" class="modal">
+          <div class="modal-content">
+            <span class="close">&times;</span>
+            <p>Enter Time Quantum:</p>
+            <input type="number" id="quantumInput" min="1" placeholder="Enter a positive number">
+            <button id="submitQuantum">Submit</button>
+          </div>
+        </div>
     </div>
 </main>
 
@@ -90,5 +101,6 @@
   <!-- JavaScript -->
   <script src="script.js"></script>
     <script src="apppp.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </body>
 </html>
