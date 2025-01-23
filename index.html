@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPU Process Scheduler</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <nav class="navbar">
+          <div class="logo">
+            <img src="Logo.png" alt="" style="height: 20%;" width="20%">
+          </div>
+          <ul class="nav-links">
+            <li><a href="#">Home</a></li>
+            <li><a href="#">About Us</a></li>
+            <li><a href="#">How It Works</a></li>
+            <li><a href="#">Contact</a></li>
+          </ul>
+          <div class="menu-toggle" id="mobile-menu">
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+          </div>
+        </nav>
+      </header>
+<br><br><br>
+      <main>    
+    <div class="container">
+        <h1>CPU Process Scheduler</h1>
+        <form id="processForm">
+            <label for="numProcesses">Number of Processes:</label>
+            <input type="number" id="numProcesses" min="1" required>
+            <br>
+            <br>
+            <label for="algorithm">Select Scheduling Algorithm:</label>
+            <select id="algorithm" required>
+                <option value="fcfs">First-Come-First-Serve (FCFS)</option>
+                <option value="sjf">Shortest Job First (SJF)</option>
+                <option value="srtf">Shortest Remaining Time First (SRTF)</option>
+                <option value="rr">Round Robin</option>
+                <option value="priority_np">Priority Scheduling (Non-Preemptive)</option>
+                <option value="priority_p">Priority Scheduling (Preemptive)</option>
+            </select>
+
+            <button type="button" id="generateInputs">Generate Input Fields</button>
+        </form>
+
+        <div id="inputs"></div>
+        <button id="calculate" style="display:none;">Calculate</button>
+
+        <div id="ganttChart"></div>
+        <table id="metricsTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Process</th>
+                    <th>Arrival Time</th>
+                    <th>Burst Time</th>
+                    <th>Priority</th>
+                    <th>Completion Time</th>
+                    <th>Turnaround Time (TAT)</th>
+                    <th>Waiting Time (WT)</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <div id="averages" style="display:none;"></div>
+    </div>
+</main>
+
+<footer>
+    <div class="footer-container">
+      <div class="footer-left">
+        <p>&copy; 2025 CPU Scheduler. All Rights Reserved.</p>
+      </div>
+      <div class="footer-center">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">FAQ</a>
+      </div>
+      <div class="footer-right">
+        <a href="#">GitHub</a>
+        <a href="#">LinkedIn</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- JavaScript -->
+  <script src="script.js"></script>
+    <script src="apppp.js"></script>
+</body>
+</html>
