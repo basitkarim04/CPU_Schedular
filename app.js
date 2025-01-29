@@ -34,7 +34,14 @@ document.getElementById('calculate').addEventListener('click', () => {
 
         // Validate input
         if (isNaN(arrivalTime) || isNaN(burstTime) || burstTime <= 0) {
-            alert(`Invalid input for Process P${i + 1}. Please ensure all fields are filled correctly.`);
+            // alert(`Invalid input for Process P${i + 1}. Please ensure all fields are filled correctly.`);
+            Toastify({
+                text: `Invalid input for Process P${i + 1}. Please ensure all fields are filled correctly.`,
+                duration: 3000, // Notification duration in milliseconds
+                gravity: "top", // Position: top or bottom
+                position: "center", // Position: left, center, right
+                backgroundColor: "linear-gradient(to right,rgb(39, 116, 172),rgb(13, 95, 146))",
+            }).showToast();
             return;
         }
 
@@ -48,85 +55,302 @@ document.getElementById('calculate').addEventListener('click', () => {
         });
     }
 
-    let metrics;
+    let metrics, data;
     switch (algorithm) {
         case 'fcfs':
-            metrics = fcfs(processes);
+            data = fcfs(processes);
             break;
         case 'sjf':
-            metrics = sjf(processes, false);
+            data = sjf(processes, false);
             break;
         case 'srtf':
-            metrics = srtf(processes);
+            data = performSRTFScheduling(processes);              
             break;
-        case 'rr':
-            const quantum = parseInt(prompt('Enter Time Quantum:', '2'));
-            if (isNaN(quantum) || quantum <= 0) {
-                alert('Invalid quantum. Please enter a positive number.');
-                return;
+            case 'rr': {
+                // Show the modal
+                const modal = document.getElementById('quantumModal');
+                const quantumInput = document.getElementById('quantumInput');
+                const submitQuantum = document.getElementById('submitQuantum');
+                const closeModal = document.querySelector('.close');
+            
+                modal.style.display = 'block'; 
+            
+                
+                closeModal.addEventListener('click', () => {
+                    modal.style.display = 'none';
+                });
+            
+                
+                submitQuantum.addEventListener('click', () => {
+                    const quantum = parseInt(quantumInput.value);
+            
+                    if (isNaN(quantum) || quantum <= 0) {
+                        Toastify({
+                            text: 'Invalid quantum. Please enter a positive number.',
+                            duration: 3000,
+                            gravity: "top",
+                            position: "center",
+                            backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)",
+                        }).showToast();
+                        return;
+                    }
+            
+                    modal.style.display = 'none'; 
+            
+                    
+                    const data = executeRoundRobin(processes, quantum);
+            
+                    
+                    renderMetricsTable(data.metrics);
+                    renderAverages(data.metrics);
+                    drawGanttChart(data);
+                });
+            
+                break;
             }
-            metrics = roundRobin(processes, quantum);
-            break;
-        case 'priority_np':
-            metrics = priorityScheduling(processes, false);
+            case 'priority_np':
+            data = nonPreemptivePriorityScheduling(processes);
             break;
         case 'priority_p':
-            metrics = priorityScheduling(processes, true);
+            data = performPriorityPreemptiveScheduling(processes);
             break;
     }
-    renderMetricsTable(metrics);
-    renderAverages(metrics);
-    renderGanttChart(metrics);
+    renderMetricsTable(data.metrics);
+    renderAverages(data.metrics);
+    drawGanttChart(data);
 });
 
-function fcfs(processes) { 
+function fcfs(processes) {
     // Sort processes by arrival time
-    processes.sort((a, b) => a.arrivalTime - b.arrivalTime);
+    const temp = [...processes].sort((a, b) => a.arrivalTime - b.arrivalTime);
+    
+    let currentTime = 0;
+    const executionSequence = [];
+    
+    // Process each job and create metrics
+    const metrics = temp.map(process => {
+        // If there's idle time before the process
+        if (currentTime < process.arrivalTime) {
+            executionSequence.push({
+                pid: 'idle',
+                startTime: currentTime,
+                endTime: process.arrivalTime
+            });
+            currentTime = process.arrivalTime;
+        }
 
-    let time = 0; // Initialize time at 0
-    return processes.map(process => {
-        // Set completionTime to the current time plus burstTime
-        const completionTime = time + process.burstTime;
+        // Add process execution to sequence
+        const startTime = currentTime;
+        currentTime += process.burstTime;
+        
+        executionSequence.push({
+            pid: process.pid,
+            startTime: startTime,
+            endTime: currentTime
+        });
 
-        // Calculate TAT and WT based on updated completionTime
+        // Calculate metrics
+        const completionTime = currentTime;
         const tat = completionTime - process.arrivalTime;
         const wt = tat - process.burstTime;
 
-        // Increment time by burstTime to update for the next process
-        time += process.burstTime;
-
-        return { ...process, completionTime, tat, wt };
+        return {
+            ...process,
+            completionTime,
+            tat,
+            wt
+        };
     });
+
+    return { metrics, executionSequence };
 }
+
+
+
+
+
+
+
+function performPriorityPreemptiveScheduling(processes) {
+    const temp = processes.map(p => ({
+        ...p,
+        remainingTime: p.burstTime,
+        completionTime: 0,
+        tat: 0,
+        wt: 0,
+        started: false
+    }));
+
+    let currentTime = 0;
+    let completed = 0;
+    const n = processes.length;
+
+    // Store the execution sequence with time intervals
+    const executionSequence = [];
+    let currentProcess = null;
+    let currentProcessStartTime = 0;
+
+    while (completed !== n) {
+        let minPriority = Number.MAX_VALUE;
+        let selectedProcess = null;
+
+        for (const process of temp) {
+            if (process.arrivalTime <= currentTime && 
+                process.remainingTime > 0 && 
+                process.priority < minPriority) {
+                    minPriority = process.priority;
+                    selectedProcess = process;
+            }
+        }
+
+        if (selectedProcess === null) {
+            // If there's an idle period, add it to the sequence
+            if (currentProcess !== null) {
+                executionSequence.push({
+                    pid: currentProcess.pid,
+                    startTime: currentProcessStartTime,
+                    endTime: currentTime
+                });
+                currentProcess = null;
+            }
+            currentTime++;
+            continue;
+        }
+
+        // If there's a process switch, record the previous process's interval
+        if (currentProcess !== selectedProcess) {
+            if (currentProcess !== null) {
+                executionSequence.push({
+                    pid: currentProcess.pid,
+                    startTime: currentProcessStartTime,
+                    endTime: currentTime
+                });
+            }
+            currentProcess = selectedProcess;
+            currentProcessStartTime = currentTime;
+        }
+
+        selectedProcess.remainingTime--;
+
+        if (selectedProcess.remainingTime === 0) {
+            completed++;
+            selectedProcess.completionTime = currentTime + 1;
+            selectedProcess.tat = selectedProcess.completionTime - selectedProcess.arrivalTime;
+            selectedProcess.wt = selectedProcess.tat - selectedProcess.burstTime;
+
+            // Record the final interval for this process
+            executionSequence.push({
+                pid: selectedProcess.pid,
+                startTime: currentProcessStartTime,
+                endTime: currentTime + 1
+            });
+            currentProcess = null;
+        }
+
+        currentTime++;
+    }
+
+    const metrics = temp.map(({ pid, arrivalTime, burstTime, priority, completionTime, tat, wt }) => ({
+        pid,
+        arrivalTime,
+        burstTime,
+        priority,
+        completionTime,
+        tat,
+        wt
+    }));
+
+    return { metrics, executionSequence };
+}
+
+
+
+
+
+
+
 
 function sjf(processes, preemptive) {
     let time = 0, completed = 0;
     const metrics = [];
-    const remainingProcesses = processes.map(p => ({ ...p }));
+    const executionSequence = [];
+    const remainingProcesses = processes.map(p => ({ 
+        ...p, 
+        burstTime: p.burstTime,
+        originalBurstTime: p.burstTime 
+    }));
+
+    let currentRunningPid = null;
+    let currentProcessStartTime = null;
 
     while (completed < processes.length) {
-        const availableProcesses = remainingProcesses.filter(p => p.arrivalTime <= time && p.burstTime > 0);
+        const availableProcesses = remainingProcesses.filter(p => 
+            p.arrivalTime <= time && p.burstTime > 0
+        );
         availableProcesses.sort((a, b) => a.burstTime - b.burstTime);
 
         if (availableProcesses.length === 0) {
-            time++;
+            // If there was a running process, add it to sequence before idle
+            if (currentRunningPid !== null) {
+                executionSequence.push({
+                    pid: currentRunningPid,
+                    startTime: currentProcessStartTime,
+                    endTime: time
+                });
+                currentRunningPid = null;
+            }
+            
+            // Track idle time
+            const nextArrival = Math.min(...remainingProcesses
+                .filter(p => p.burstTime > 0)
+                .map(p => p.arrivalTime));
+            
+            executionSequence.push({
+                pid: 'idle',
+                startTime: time,
+                endTime: nextArrival
+            });
+            
+            time = nextArrival;
             continue;
         }
 
         const currentProcess = preemptive ? availableProcesses[0] : availableProcesses.shift();
         const burst = preemptive ? 1 : currentProcess.burstTime;
 
+        // Handle process switching in execution sequence
+        if (currentRunningPid !== currentProcess.pid) {
+            if (currentRunningPid !== null) {
+                executionSequence.push({
+                    pid: currentRunningPid,
+                    startTime: currentProcessStartTime,
+                    endTime: time
+                });
+            }
+            currentRunningPid = currentProcess.pid;
+            currentProcessStartTime = time;
+        }
+
         currentProcess.burstTime -= burst;
         time += burst;
 
         if (currentProcess.burstTime === 0) {
+            // Add final execution sequence entry for completed process
+            executionSequence.push({
+                pid: currentProcess.pid,
+                startTime: currentProcessStartTime,
+                endTime: time
+            });
+            currentRunningPid = null;
+
             const completionTime = time;
             const tat = completionTime - currentProcess.arrivalTime;
-            const wt = tat - processes.find(p => p.pid === currentProcess.pid).originalBurstTime;
+            const wt = tat - currentProcess.originalBurstTime;
 
             metrics.push({
-                ...currentProcess,
-                originalBurstTime: processes.find(p => p.pid === currentProcess.pid).originalBurstTime, // Add original burst time
+                pid: currentProcess.pid,
+                arrivalTime: currentProcess.arrivalTime,
+                burstTime: currentProcess.originalBurstTime,
                 completionTime,
                 tat,
                 wt
@@ -135,157 +359,342 @@ function sjf(processes, preemptive) {
         }
     }
 
-    return metrics;
+    // Sort metrics by PID to maintain consistent order
+    metrics.sort((a, b) => a.pid.localeCompare(b.pid));
+
+    return { metrics, executionSequence };
 }
 
-function srtf(processes) {
-    let time = 0; // The current time
-    let completed = 0; // Count of completed processes
-    const metrics = []; // Stores the metrics (completion time, turnaround time, etc.)
-    const remainingProcesses = processes.map(p => ({ ...p, remainingBurstTime: p.burstTime }));
+
+
+function executeRoundRobin(processes, quantum) {
+    // Sort processes by arrival time
+    processes.sort((a, b) => a.arrivalTime - b.arrivalTime);
+
+    let currentTime = 0;
+    const remainingBurstTimes = processes.map(p => p.burstTime);
+    const executionSequence = []; // To store Gantt chart details
+    const metrics = [];
+    const queue = [];
+    const inQueue = new Array(processes.length).fill(false); // Tracks if a process is in the queue
+    let completed = 0;
+    let lastExecuted = -1; // Keeps track of the last executed process index
 
     while (completed < processes.length) {
-        const availableProcesses = remainingProcesses.filter(p => p.arrivalTime <= time && p.remainingBurstTime > 0);
+        // Add processes to the queue if they have arrived and are not already completed
+        for (let i = 0; i < processes.length; i++) {
+            if (
+                processes[i].arrivalTime <= currentTime && // Process has arrived
+                remainingBurstTimes[i] > 0 && // Process is not yet completed
+                !inQueue[i] // Process is not already in the queue
+            ) {
+                queue.push(i);
+                inQueue[i] = true; // Mark process as added to the queue
+            }
+        }
 
-        if (availableProcesses.length === 0) {
-            time++;
+        if (queue.length === 0) {
+            // No process is ready, idle time
+            const nextArrival = Math.min(...processes.filter((p, i) => remainingBurstTimes[i] > 0).map(p => p.arrivalTime));
+            executionSequence.push({ pid: 'idle', startTime: currentTime, endTime: nextArrival });
+            currentTime = nextArrival;
             continue;
         }
 
-        // Select the process with the shortest remaining burst time
-        const currentProcess = availableProcesses.sort((a, b) => a.remainingBurstTime - b.remainingBurstTime)[0];
-        const burst = 1; // We can reduce the burst by 1 in each iteration
+        // Ensure the next process is different from the last executed one
+        let index = queue.find(i => i !== lastExecuted); // Find a different process
+        if (index === undefined) {
+            index = queue[0]; // Fallback to the first in queue if no other process is available
+        }
 
-        // Reduce the remaining burst time of the current process
-        currentProcess.remainingBurstTime -= burst;
-        time += burst;
+        queue.splice(queue.indexOf(index), 1); // Remove the selected process from the queue
+        inQueue[index] = false; // Mark process as removed from the queue
+        const process = processes[index];
+        const executeTime = Math.min(quantum, remainingBurstTimes[index]);
+        const startTime = currentTime;
+        currentTime += executeTime;
+        remainingBurstTimes[index] -= executeTime;
 
-        // If the process is finished
-        if (currentProcess.remainingBurstTime === 0) {
-            const completionTime = time;
-            const tat = completionTime - currentProcess.arrivalTime;
-            const wt = tat - currentProcess.burstTime;
+        executionSequence.push({ pid: process.pid, startTime, endTime: currentTime });
+
+        // Mark the process as completed if its burst time is finished
+        if (remainingBurstTimes[index] === 0) {
+            completed++;
+            const finishTime = currentTime;
+            const tat = finishTime - process.arrivalTime;
+            const wt = tat - process.burstTime;
 
             metrics.push({
-                ...currentProcess,
-                completionTime,
+                pid: process.pid,
+                arrivalTime: process.arrivalTime,
+                burstTime: process.burstTime,
+                completionTime: finishTime,
                 tat,
                 wt
             });
-            completed++;
-        }
-    }
-
-    return metrics;
-}
-
-
-function roundRobin(processes, quantum) {
-    const queue = processes.map(p => ({ ...p }));
-    const metrics = [];
-    let time = 0;
-
-    while (queue.length > 0) {
-        const process = queue.shift();
-        const burst = Math.min(process.burstTime, quantum);
-
-        time += burst;
-        process.burstTime -= burst;
-
-        if (process.burstTime > 0) {
-            queue.push(process);
         } else {
-            const completionTime = time;
-            const tat = completionTime - process.arrivalTime;
-            const wt = tat - processes.find(p => p.pid === process.pid).originalBurstTime;
-
-            metrics.push({ ...process, completionTime, tat, wt });
+            // Re-add the process to the queue
+            queue.push(index);
+            inQueue[index] = true; // Ensure the process is tracked as in the queue
         }
+
+        lastExecuted = index; // Update the last executed process
     }
 
-    return metrics;
+    metrics.sort((a, b) => a.pid.localeCompare(b.pid)); // Sort metrics by process ID
+
+    // Fix Gantt Chart for better readability
+    const formattedGanttChart = executionSequence.map(
+        (step) => `${step.pid} (${step.startTime}-${step.endTime})`
+    );
+
+    console.log("Gantt Chart:", formattedGanttChart.join(" -> "));
+    return { metrics, executionSequence };
 }
 
-function priorityScheduling(processes, preemptive) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+function nonPreemptivePriorityScheduling(processes) {
     let time = 0, completed = 0;
     const metrics = [];
-    const remainingProcesses = processes.map(p => ({ ...p }));
+    const executionSequence = [];
+    const remainingProcesses = processes.map(p => ({
+        ...p,
+        burstTime: p.burstTime,
+        originalBurstTime: p.burstTime,
+        priority: p.priority
+    }));
 
     while (completed < processes.length) {
-        const availableProcesses = remainingProcesses.filter(p => p.arrivalTime <= time && p.burstTime > 0);
+        // Filter and sort processes by arrival time and priority
+        const availableProcesses = remainingProcesses.filter(p => 
+            p.arrivalTime <= time && p.burstTime > 0
+        );
         availableProcesses.sort((a, b) => a.priority - b.priority);
 
         if (availableProcesses.length === 0) {
-            time++;
+            // Track idle time
+            const nextArrival = Math.min(...remainingProcesses
+                .filter(p => p.burstTime > 0)
+                .map(p => p.arrivalTime));
+            
+            executionSequence.push({
+                pid: 'idle',
+                startTime: time,
+                endTime: nextArrival
+            });
+
+            time = nextArrival;
             continue;
         }
 
-        const currentProcess = preemptive ? availableProcesses[0] : availableProcesses.shift();
-        const burst = preemptive ? 1 : currentProcess.burstTime;
+        const currentProcess = availableProcesses[0];
+        const burst = currentProcess.burstTime;
 
-        currentProcess.burstTime -= burst;
+        executionSequence.push({
+            pid: currentProcess.pid,
+            startTime: time,
+            endTime: time + burst
+        });
+
         time += burst;
+        currentProcess.burstTime = 0;
 
-        if (currentProcess.burstTime === 0) {
-            const completionTime = time;
-            const tat = completionTime - currentProcess.arrivalTime;
-            const wt = tat - processes.find(p => p.pid === currentProcess.pid).burstTime;
+        const completionTime = time;
+        const tat = completionTime - currentProcess.arrivalTime;
+        const wt = tat - currentProcess.originalBurstTime;
 
-            metrics.push({ ...currentProcess, completionTime, tat, wt });
-            completed++;
-        }
+        metrics.push({
+            pid: currentProcess.pid,
+            arrivalTime: currentProcess.arrivalTime,
+            burstTime: currentProcess.originalBurstTime,
+            priority: currentProcess.priority,
+            completionTime,
+            tat,
+            wt
+        });
+
+        completed++;
     }
 
-    return metrics;
+    // Sort metrics by PID to maintain consistent order
+    metrics.sort((a, b) => a.pid.localeCompare(b.pid));
+
+    return { metrics, executionSequence };
 }
 
-function renderGanttChart(metrics) {
-    const ganttChart = document.getElementById('ganttChart');
-    ganttChart.innerHTML = ''; // Clear existing Gantt chart
 
-    let currentTime = 0; // Track the current timeline
 
-    metrics.forEach((process, index) => {
-        // Handle idle time if the current process starts after the last process ended
-        if (currentTime < process.arrivalTime) {
-            ganttChart.innerHTML += `
-                <div style="background-color: #ccc; flex: ${process.arrivalTime - currentTime}; position: relative; text-align: center; color: black;">
-                    Idle
-                    <div style="position: absolute; bottom: -20px; left: 0; font-size: 12px; color: black;">${currentTime}</div>
-                    <div style="position: absolute; bottom: -20px; right: 0; font-size: 12px; color: black;">${process.arrivalTime}</div>
-                </div>`;
-            currentTime = process.arrivalTime; // Move the timeline forward to the process start time
+
+
+
+
+
+
+
+
+function performSRTFScheduling(processes) {
+    const temp = processes.map(p => ({
+        ...p,
+        remainingTime: p.burstTime,
+        completionTime: 0,
+        tat: 0,
+        wt: 0,
+        started: false
+    }));
+
+    let currentTime = 0;
+    let completed = 0;
+    const n = processes.length;
+    
+    // Store the execution sequence with time intervals
+    const executionSequence = [];
+    let currentProcess = null;
+    let currentProcessStartTime = 0;
+
+    while (completed !== n) {
+        let minRemainingTime = Number.MAX_VALUE;
+        let selectedProcess = null;
+
+        for (const process of temp) {
+            if (process.arrivalTime <= currentTime && 
+                process.remainingTime > 0 && 
+                process.remainingTime < minRemainingTime) {
+                    minRemainingTime = process.remainingTime;
+                    selectedProcess = process;
+            }
         }
 
-        // Calculate execution time for the current process
-        const executionTime = process.completionTime - Math.max(process.arrivalTime, currentTime);
+        if (selectedProcess === null) {
+            // If there's an idle period, add it to the sequence
+            if (currentProcess !== null) {
+                executionSequence.push({
+                    pid: currentProcess.pid,
+                    startTime: currentProcessStartTime,
+                    endTime: currentTime
+                });
+                currentProcess = null;
+            }
+            currentTime++;
+            continue;
+        }
 
-        ganttChart.innerHTML += `
-            <div style="background-color: #${Math.floor(Math.random() * 16777215).toString(16)}; flex: ${executionTime}; position: relative; text-align: center; color: white;">
-                ${process.pid}
-                <div style="position: absolute; bottom: -20px; left: 0; font-size: 12px;">${currentTime}</div>
-                <div style="position: absolute; bottom: -20px; right: 0; font-size: 12px;">${currentTime + executionTime}</div>
-            </div>`;
-        currentTime += executionTime; // Update the timeline to the end of the current process
-    });
+        // If there's a process switch, record the previous process's interval
+        if (currentProcess !== selectedProcess) {
+            if (currentProcess !== null) {
+                executionSequence.push({
+                    pid: currentProcess.pid,
+                    startTime: currentProcessStartTime,
+                    endTime: currentTime
+                });
+            }
+            currentProcess = selectedProcess;
+            currentProcessStartTime = currentTime;
+        }
 
-    // Show the Gantt chart container
-    document.getElementById('ganttChartContainer').style.display = 'block';
+        selectedProcess.remainingTime--;
+        
+        if (selectedProcess.remainingTime === 0) {
+            completed++;
+            selectedProcess.completionTime = currentTime + 1;
+            selectedProcess.tat = selectedProcess.completionTime - selectedProcess.arrivalTime;
+            selectedProcess.wt = selectedProcess.tat - selectedProcess.burstTime;
+            
+            // Record the final interval for this process
+            executionSequence.push({
+                pid: selectedProcess.pid,
+                startTime: currentProcessStartTime,
+                endTime: currentTime + 1
+            });
+            currentProcess = null;
+        }
+
+        currentTime++;
+    }
+
+    const metrics = temp.map(({ pid, arrivalTime, burstTime, completionTime, tat, wt }) => ({
+        pid,
+        arrivalTime,
+        burstTime,
+        completionTime,
+        tat,
+        wt
+    }));
+
+    return { metrics, executionSequence };
 }
 
 
+
+
+function drawGanttChart(data) {
+    const ganttChart = document.getElementById('ganttChart');
+    ganttChart.innerHTML = '';
+    const chartContainer = document.createElement('div');
+    chartContainer.style.display = 'flex';
+    chartContainer.style.justifyContent = 'flex-start';
+    chartContainer.style.alignItems = 'flex-start';
+    chartContainer.style.width = '100%';
+    chartContainer.style.border = '1px solid #000';
+    chartContainer.style.position = 'relative';
+
+    const colors = [
+        '#FFB6C1', '#FFD700', '#90EE90', '#ADD8E6', '#FFDEAD',
+        '#DDA0DD', '#FF6347', '#20B2AA', '#FF69B4', '#B0E0E6'
+    ];
+
+    const processColors = {};
+    let colorIndex = 0;
+    const executionSequence = data.executionSequence;
+    executionSequence.forEach((interval, index) => {
+        const duration = interval.endTime - interval.startTime;
+        
+        // Assign consistent colors to processes
+        if (!processColors[interval.pid]) {
+            processColors[interval.pid] = colors[colorIndex++ % colors.length];
+        }
+
+        const processDiv = document.createElement('div');
+        processDiv.style.backgroundColor = processColors[interval.pid];
+        processDiv.style.flex = `${duration}`;
+        processDiv.style.height = '50px';
+        processDiv.style.position = 'relative';
+        processDiv.style.textAlign = 'center';
+        processDiv.style.color = 'black';
+        processDiv.innerHTML = `
+            ${interval.pid}
+            <div style="position: absolute; bottom: -10px; left: 0; font-size: 12px;">${interval.startTime}</div>
+            <div style="position: absolute; bottom: -10px; right: 0; font-size: 12px;">${interval.endTime}</div>
+        `;
+        chartContainer.appendChild(processDiv);
+    });
+
+    ganttChart.appendChild(chartContainer);
+    document.getElementById('ganttChartContainer').style.display = 'block';
+}
 
 
 function renderMetricsTable(metrics) {
     const tableBody = document.querySelector('#metricsTable tbody');
     tableBody.innerHTML = ''; // Clear the table body
-
+    console.log(metrics);
     metrics.forEach(process => {
         tableBody.innerHTML += `
             <tr>
                 <td>${process.pid}</td>
                 <td>${process.arrivalTime}</td>
-                <td>${process.originalBurstTime}</td> <!-- Use originalBurstTime instead of burstTime -->
+                <td>${process.burstTime || process.originalBurstTime}</td> <!-- Use original burst time -->
                 <td>${process.priority || '-'}</td>
                 <td>${process.completionTime}</td>
                 <td>${process.tat}</td>

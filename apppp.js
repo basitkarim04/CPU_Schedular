@@ -373,42 +373,26 @@ function executeRoundRobin(processes, quantum) {
 
     let currentTime = 0;
     const remainingBurstTimes = processes.map(p => p.burstTime);
-    const executionSequence = []; // To store Gantt chart details
+    const executionSequence = []; // Stores Gantt chart details
     const metrics = [];
     const queue = [];
-    const inQueue = new Array(processes.length).fill(false); // Tracks if a process is in the queue
     let completed = 0;
-    let lastExecuted = -1; // Keeps track of the last executed process index
+    let processIndex = 0; // Tracks the next process to arrive
 
     while (completed < processes.length) {
-        // Add processes to the queue if they have arrived and are not already completed
-        for (let i = 0; i < processes.length; i++) {
-            if (
-                processes[i].arrivalTime <= currentTime && // Process has arrived
-                remainingBurstTimes[i] > 0 && // Process is not yet completed
-                !inQueue[i] // Process is not already in the queue
-            ) {
-                queue.push(i);
-                inQueue[i] = true; // Mark process as added to the queue
-            }
+        // Add processes to the queue if they have arrived
+        while (processIndex < processes.length && processes[processIndex].arrivalTime <= currentTime) {
+            queue.push(processIndex);
+            processIndex++;
         }
 
         if (queue.length === 0) {
-            // No process is ready, idle time
-            const nextArrival = Math.min(...processes.filter((p, i) => remainingBurstTimes[i] > 0).map(p => p.arrivalTime));
-            executionSequence.push({ pid: 'idle', startTime: currentTime, endTime: nextArrival });
-            currentTime = nextArrival;
+            // No ready process, advance time to the next arrival
+            currentTime = processes[processIndex].arrivalTime;
             continue;
         }
 
-        // Ensure the next process is different from the last executed one
-        let index = queue.find(i => i !== lastExecuted); // Find a different process
-        if (index === undefined) {
-            index = queue[0]; // Fallback to the first in queue if no other process is available
-        }
-
-        queue.splice(queue.indexOf(index), 1); // Remove the selected process from the queue
-        inQueue[index] = false; // Mark process as removed from the queue
+        let index = queue.shift(); // Take the first process from the queue
         const process = processes[index];
         const executeTime = Math.min(quantum, remainingBurstTimes[index]);
         const startTime = currentTime;
@@ -417,7 +401,13 @@ function executeRoundRobin(processes, quantum) {
 
         executionSequence.push({ pid: process.pid, startTime, endTime: currentTime });
 
-        // Mark the process as completed if its burst time is finished
+        // Add new processes that arrive during execution
+        while (processIndex < processes.length && processes[processIndex].arrivalTime <= currentTime) {
+            queue.push(processIndex);
+            processIndex++;
+        }
+
+        // Mark process as completed or re-add to queue
         if (remainingBurstTimes[index] === 0) {
             completed++;
             const finishTime = currentTime;
@@ -433,12 +423,8 @@ function executeRoundRobin(processes, quantum) {
                 wt
             });
         } else {
-            // Re-add the process to the queue
-            queue.push(index);
-            inQueue[index] = true; // Ensure the process is tracked as in the queue
+            queue.push(index); // Re-add process to the end of the queue
         }
-
-        lastExecuted = index; // Update the last executed process
     }
 
     metrics.sort((a, b) => a.pid.localeCompare(b.pid)); // Sort metrics by process ID
@@ -451,7 +437,6 @@ function executeRoundRobin(processes, quantum) {
     console.log("Gantt Chart:", formattedGanttChart.join(" -> "));
     return { metrics, executionSequence };
 }
-
 
 
 
